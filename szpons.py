@@ -3,7 +3,7 @@
 """
 SourceForge Mirror Speed Checker
 =================================
-Sprawdza dostępne mirrory SourceForge i wybiera najszybszy do pobrania.
+Benchmarks available SourceForge mirrors and automatically downloads the file from the fastest one.
 """
 
 import sys
@@ -16,7 +16,7 @@ import subprocess
 import urllib.parse
 
 
-# ─── Auto-install wymaganych pakietów ────────────────────────────────────────
+# ─── Auto-install Required Packages ──────────────────────────────────────────
 
 
 def _ensure_packages():
@@ -24,7 +24,7 @@ def _ensure_packages():
         try:
             __import__(pkg)
         except ImportError:
-            print(f"[setup] Instaluję pakiet: {pkg}...")
+            print(f"[setup] Installing package: {pkg}...")
             subprocess.check_call(
                 [sys.executable, "-m", "pip", "install", pkg, "-q"],
                 stdout=subprocess.DEVNULL,
@@ -51,11 +51,11 @@ from rich.align import Align
 from rich import box
 from rich.columns import Columns
 
-# ─── Stałe ───────────────────────────────────────────────────────────────────
+# ─── Constants ───────────────────────────────────────────────────────────────
 
-DEFAULT_WORKERS = 6  # ile mirrorów testować jednocześnie
-DEFAULT_TEST_KB = 512  # ile KB pobierać przy teście szybkości
-REQUEST_TIMEOUT = (5, 12)  # (connect, read) timeout w sekundach
+DEFAULT_WORKERS = 6  # How many mirrors to test simultaneously
+DEFAULT_TEST_KB = 512  # Sample chunk size to download for testing speed
+REQUEST_TIMEOUT = (5, 12)  # (connect, read) timeout in seconds
 
 HEADERS = {
     "User-Agent": (
@@ -63,12 +63,12 @@ HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9,pl-PL;q=0.8",
 }
 
-# Maksymalnie rozbudowana, globalna lista znanych mirrorów SourceForge
+# Fully extended global list of known SourceForge mirrors
 FALLBACK_MIRRORS = [
-    # Najważniejsze i najszybsze w Europie / blisko nas
+    # Europe & Closest regions
     "altushost-swe",
     "pilotfiber",
     "cfhcable",
@@ -87,7 +87,7 @@ FALLBACK_MIRRORS = [
     "spline",
     "kumisystems",
     "tcpdiag",
-    # Ameryka Północna (USA / Kanada)
+    # North America (USA / Canada)
     "phoenixnap",
     "versaweb",
     "ayera",
@@ -105,7 +105,7 @@ FALLBACK_MIRRORS = [
     "newcontinuum",
     "innoscale",
     "softlayer",
-    # Azja / Australia / Reszta Świata
+    # Asia / Australia / Rest of World
     "jaist",
     "nchc",
     "excellmedia",
@@ -123,19 +123,19 @@ FALLBACK_MIRRORS = [
 console = Console()
 
 
-# ─── Parsowanie URL ───────────────────────────────────────────────────────────
+# ─── URL Parsing ──────────────────────────────────────────────────────────────
 
 
 def parse_sf_url(url: str) -> dict | None:
     """
-    Wyciąga projekt, oryginalną zakodowaną ścieżkę oraz tokeny (query string).
+    Extracts the project, original encoded file path, and session query string tokens.
     """
     url = url.strip()
 
-    # Wyciągamy query string (tokeny typu ts=..., fid=...) jeśli istnieją
+    # Extract query string (tokens like ts=..., fid=...) if they exist
     query = url.split("?")[1] if "?" in url else ""
 
-    # 1. Format standardowej strony pobierania projektu
+    # 1. Standard project download page format
     m_proj = re.search(
         r"sourceforge\.net/projects/([^/]+)/files/([^?#]+)", url, re.IGNORECASE
     )
@@ -146,7 +146,7 @@ def parse_sf_url(url: str) -> dict | None:
             raw_path = raw_path[:-9].rstrip("/")
         return {"project": project, "raw_path": raw_path, "query": query}
 
-    # 2. Format bezpośrednich linków (downloads lub subdomeny mirrorów)
+    # 2. Direct download link formats (downloads or mirror subdomains)
     m_direct = re.search(
         r"(?:downloads|[\w\-]+\.dl)\.sourceforge\.net/(?:project/)?([^/]+)/([^?#]+)",
         url,
@@ -160,13 +160,13 @@ def parse_sf_url(url: str) -> dict | None:
     return None
 
 
-# ─── Pobieranie listy mirrorów ────────────────────────────────────────────────
+# ─── Fetching Mirror List ─────────────────────────────────────────────────────
 
 
 def get_mirrors(project: str, raw_path: str) -> list[str]:
     """
-    Pobiera listę mirrorów z HTML strony pobierania SourceForge.
-    Przy błędzie wraca do rozbudowanej listy zapasowej.
+    Fetches the mirror list directly from the HTML code of the download page.
+    Falls back to the built-in database upon network error.
     """
     url = f"https://sourceforge.net/projects/{project}/files/{raw_path}/download"
 
@@ -174,32 +174,32 @@ def get_mirrors(project: str, raw_path: str) -> list[str]:
         r = requests.get(url, headers=HEADERS, timeout=15, allow_redirects=True)
         r.raise_for_status()
 
-        # Szukamy kodów mirrorów w HTML
+        # Extract mirror codes from HTML
         found = list(dict.fromkeys(re.findall(r"use_mirror=([a-z0-9\-]+)", r.text)))
 
         if len(found) >= 2:
             return found
 
         console.print(
-            "[yellow]⚠  Nie znaleziono mirrorów na stronie – używam pełnej listy zapasowej.[/yellow]"
+            "[yellow]⚠  No mirrors found on page – using the built-in fallback database.[/yellow]"
         )
 
     except Exception:
         console.print(
-            "[yellow]⚠  Błąd pobierania strony (brak dostępu do listy online) – używam pełnej listy zapasowej.[/yellow]"
+            "[yellow]⚠  Failed to reach page (no online access) – using the built-in fallback database.[/yellow]"
         )
 
     return FALLBACK_MIRRORS
 
 
-# ─── Test szybkości ───────────────────────────────────────────────────────────
+# ─── Speed Benchmarking ───────────────────────────────────────────────────────
 
 
 def test_mirror(
     code: str, project: str, raw_path: str, query: str, test_kb: int
 ) -> dict:
     """
-    Sprawdza jeden mirror, dołączając oryginalne tokeny autoryzacyjne sesji.
+    Benchmarks a single mirror by forwarding original session tokens to pass auth.
     """
     sf_url = f"https://{code}.dl.sourceforge.net/project/{project}/{raw_path}"
     if query:
@@ -230,7 +230,7 @@ def test_mirror(
             r.close()
             return result
 
-        # Pobierz próbkę danych
+        # Stream chunk sample data
         test_bytes = test_kb * 1024
         downloaded = 0
         t_dl = time.perf_counter()
@@ -256,13 +256,13 @@ def test_mirror(
     return result
 
 
-# ─── Pobieranie pliku ─────────────────────────────────────────────────────────
+# ─── Downloading File ─────────────────────────────────────────────────────────
 
 
 def download_file(
     project: str, raw_path: str, query: str, mirror_code: str, output_dir: str
 ) -> str:
-    """Pobiera plik z wybranego mirrora z paskiem postępu."""
+    """Downloads the file with a rich progress bar indicator."""
     dl_url = f"https://{mirror_code}.dl.sourceforge.net/project/{project}/{raw_path}"
     if query:
         dl_url = f"{dl_url}?{query}"
@@ -286,7 +286,7 @@ def download_file(
         console=console,
     ) as progress:
         task = progress.add_task(
-            f"Pobieranie [cyan]{os.path.basename(filename)}[/cyan]...",
+            f"Downloading [cyan]{os.path.basename(filename)}[/cyan]...",
             total=total or None,
         )
         with open(filename, "wb") as f:
@@ -297,53 +297,53 @@ def download_file(
     return filename
 
 
-# ─── Główna logika ────────────────────────────────────────────────────────────
+# ─── Main Execution Program Flow ──────────────────────────────────────────────
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="SourceForge Mirror Speed Checker",
+        description="SourceForge Mirror Speed Checker & Downloader",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("url", nargs="?", help="URL pliku na SourceForge")
+    parser.add_argument("url", nargs="?", help="SourceForge file download URL")
     parser.add_argument(
         "--workers",
         type=int,
         default=DEFAULT_WORKERS,
         metavar="N",
-        help=f"Równoległe testy mirrorów (domyślnie: {DEFAULT_WORKERS})",
+        help=f"Number of parallel mirror checks (default: {DEFAULT_WORKERS})",
     )
     parser.add_argument(
         "--test-kb",
         type=int,
         default=DEFAULT_TEST_KB,
         metavar="KB",
-        help=f"Rozmiar próbki do testu szybkości w KB (domyślnie: {DEFAULT_TEST_KB})",
+        help=f"Sample size to download for testing speed in KB (default: {DEFAULT_TEST_KB})",
     )
     parser.add_argument(
         "--output-dir",
         default=".",
         metavar="FOLDER",
-        help="Folder docelowy pobrania (domyślnie: bieżący)",
+        help="Target folder for the download destination (default: current)",
     )
     parser.add_argument(
         "--show-all",
         action="store_true",
-        help="Pokazuje absolutnie wszystkie przetestowane mirrory w tabeli (wyłącza skracanie błędów)",
+        help="Display absolutely all benchmarked mirrors inside the leaderboard table",
     )
     parser.add_argument(
         "--list-mirrors",
         action="store_true",
-        help="Wypisuje pełną lista wbudowanych mirrorów SourceForge i kończy działanie",
+        help="List the entire built-in mirror array database grid layout and exit",
     )
     args = parser.parse_args()
 
-    # Wyświetlanie wbudowanej bazy danych mirrorów i natychmiastowe wyjście
+    # Display database array items and trigger exit execution
     if args.list_mirrors:
         console.print(
             Panel(
                 Align.center(
-                    f"[bold cyan]Baza wbudowanych mirrorów SourceForge ({len(FALLBACK_MIRRORS)} pozycji)[/bold cyan]"
+                    f"[bold cyan]Built-in SourceForge Mirror Database ({len(FALLBACK_MIRRORS)} nodes)[/bold cyan]"
                 ),
                 border_style="cyan",
             )
@@ -352,12 +352,12 @@ def main():
         console.print()
         sys.exit(0)
 
-    # ── Banner ──
+    # ── Banner UI ──
     console.print(
         Panel(
             Align.center(
                 "[bold cyan]SourceForge Mirror Speed Checker[/bold cyan]\n"
-                "[dim]Testuje mirrory i wybiera najszybszy do pobrania[/dim]"
+                "[dim]Benchmarks mirrors and selects the fastest one for download[/dim]"
             ),
             border_style="cyan",
             padding=(1, 6),
@@ -367,26 +367,26 @@ def main():
     url = args.url
     if not url:
         console.print(
-            "\n[dim]Przykładowy link:[/dim]\n"
+            "\n[dim]Example link:[/dim]\n"
             "[dim]https://sourceforge.net/projects/sevenzip/files/"
             "7-Zip/24.09/7z2409-x64.exe/download[/dim]\n"
         )
         url = console.input(
-            "[bold cyan]🔗 Podaj link do pliku SF:[/bold cyan] "
+            "[bold cyan]🔗 Enter SourceForge file URL: [/bold cyan] "
         ).strip()
 
     if not url:
-        console.print("[red]❌ Nie podano URL![/red]")
+        console.print("[red]❌ No URL provided![/red]")
         sys.exit(1)
 
     parsed = parse_sf_url(url)
     if not parsed:
         console.print(
-            "[red]❌ Nie rozpoznano URL SourceForge.[/red]\n"
-            "[dim]Akceptowane formaty:\n"
-            "  https://sourceforge.net/projects/{projekt}/files/{plik}/download\n"
-            "  https://downloads.sourceforge.net/project/{projekt}/{plik}\n"
-            "  https://{mirror}.dl.sourceforge.net/project/{projekt}/{plik}[/dim]"
+            "[red]❌ Unrecognized SourceForge URL format.[/red]\n"
+            "[dim]Accepted Formats:\n"
+            "  https://sourceforge.net/projects/{project}/files/{file}/download\n"
+            "  https://downloads.sourceforge.net/project/{project}/{file}\n"
+            "  https://{mirror}.dl.sourceforge.net/project/{project}/{file}[/dim]"
         )
         sys.exit(1)
 
@@ -395,13 +395,13 @@ def main():
     query = parsed["query"]
     filename = urllib.parse.unquote(raw_path.split("/")[-1])
 
-    console.print(f"\n[green]✓[/green] Projekt: [bold]{project}[/bold]")
-    console.print(f"[green]✓[/green] Plik:    [bold]{filename}[/bold]")
+    console.print(f"\n[green]✓[/green] Project: [bold]{project}[/bold]")
+    console.print(f"[green]✓[/green] File:    [bold]{filename}[/bold]")
 
-    console.print("\n[cyan]⏳ Pobieram listę mirrorów...[/cyan]")
+    console.print("\n[cyan]⏳ Fetching mirror targets...[/cyan]")
     mirrors = get_mirrors(project, raw_path)
     console.print(
-        f"[green]✓[/green] Załadowano [bold]{len(mirrors)}[/bold] mirrorów do przetestowania.\n"
+        f"[green]✓[/green] Loaded [bold]{len(mirrors)}[/bold] mirror hosts for speed benchmarks.\n"
     )
 
     results: list[dict] = []
@@ -414,7 +414,7 @@ def main():
         console=console,
     ) as progress:
         task = progress.add_task(
-            "[cyan]Testuję szybkość mirrorów...[/cyan]",
+            "[cyan]Benchmarking mirror speeds...[/cyan]",
             total=len(mirrors),
         )
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
@@ -435,13 +435,13 @@ def main():
 
     if not ok_results:
         console.print(
-            "[red]❌ Żaden mirror nie odpowiedział poprawnie. Token wygasł lub link jest błędny.[/red]"
+            "[red]❌ No mirrors responded correctly. Session token expired or path is invalid.[/red]"
         )
         sys.exit(1)
 
     console.print()
     tbl = Table(
-        title=f"[bold]Ranking mirrorów – {filename}[/bold]",
+        title=f"[bold]Mirror Leaderboard – {filename}[/bold]",
         box=box.ROUNDED,
         border_style="cyan",
         header_style="bold cyan",
@@ -450,9 +450,9 @@ def main():
     )
     tbl.add_column("#", justify="center", width=5)
     tbl.add_column("Mirror", style="white", min_width=16)
-    tbl.add_column("Szybkość", justify="right", min_width=11)
-    tbl.add_column("Pasek", justify="left", min_width=20)
-    tbl.add_column("Latencja", justify="right", min_width=9)
+    tbl.add_column("Speed", justify="right", min_width=11)
+    tbl.add_column("Bar", justify="left", min_width=20)
+    tbl.add_column("Latency", justify="right", min_width=9)
     tbl.add_column("Status", justify="center", min_width=6)
 
     medals = ["🥇", "🥈", "🥉"]
@@ -484,7 +484,7 @@ def main():
             "[green]✓[/green]",
         )
 
-    # Wyświetlanie błędów: albo wszystkie (flaga --show-all), albo tylko pierwsze 4
+    # Error logging handler layout conditions
     displayed_failed = failed_results if args.show_all else failed_results[:4]
     for r in displayed_failed:
         tbl.add_row(
@@ -499,7 +499,7 @@ def main():
     if not args.show_all and len(failed_results) > 4:
         tbl.add_row(
             "",
-            f"[dim]… i {len(failed_results) - 4} więcej błędów (uruchom skrypt z --show-all, aby zobaczyć wszystkie)[/dim]",
+            f"[dim]… and {len(failed_results) - 4} more errors (run script with --show-all flag to view all logs)[/dim]",
             "",
             "",
             "",
@@ -516,57 +516,46 @@ def main():
     console.print(
         Panel(
             f"[bold]Mirror:  [/bold][bold cyan]{best['code']}[/bold cyan]\n"
-            f"[bold]Szybkość:[/bold] [bold green]{best['speed_mbps']:.2f} MB/s[/bold green]"
+            f"[bold]Speed:   [/bold] [bold green]{best['speed_mbps']:.2f} MB/s[/bold green]"
             + (
-                f"   |   Latencja: {best['latency_ms']:.0f} ms"
+                f"   |   Latency: {best['latency_ms']:.0f} ms"
                 if best.get("latency_ms")
                 else ""
             )
             + f"\n[bold]Link:    [/bold][dim]{best_url}[/dim]",
-            title="[bold]🏆 Najszybszy mirror[/bold]",
+            title="[bold]🏆 Fastest Mirror Winner[/bold]",
             border_style="green",
             padding=(1, 2),
         )
     )
 
-    console.print()
+    # ── Automatic Direct Downloading ──
+    console.print(
+        "\n[cyan]🚀 Automatically starting download from the fastest mirror...[/cyan]\n"
+    )
+    os.makedirs(args.output_dir, exist_ok=True)
     try:
-        choice = (
-            console.input("[bold]Pobrać plik teraz? ([cyan]T[/cyan]/n): [/bold]")
-            .strip()
-            .lower()
+        saved = download_file(project, raw_path, query, best["code"], args.output_dir)
+        size_mb = os.path.getsize(saved) / (1024 * 1024)
+        abs_path = os.path.abspath(saved)
+        console.print(
+            Panel(
+                f"[bold green]Downloaded:[/bold green]  [bold]{os.path.basename(saved)}[/bold]\n"
+                f"[bold]Size:      [/bold]  {size_mb:.2f} MB\n"
+                f"[bold]Location:  [/bold]  {abs_path}",
+                title="[bold]✅ Download Completed[/bold]",
+                border_style="green",
+                padding=(1, 2),
+            )
         )
-    except (EOFError, KeyboardInterrupt):
-        choice = "n"
+    except Exception as exc:
+        console.print(f"[red]❌ Error during download stream: {exc}[/red]")
+        console.print(
+            f"[dim]Fallback manual download link:[/dim]\n[cyan]{best_url}[/cyan]"
+        )
+        sys.exit(1)
 
-    if choice in ("", "t", "tak", "y", "yes"):
-        os.makedirs(args.output_dir, exist_ok=True)
-        console.print()
-        try:
-            saved = download_file(
-                project, raw_path, query, best["code"], args.output_dir
-            )
-            size_mb = os.path.getsize(saved) / (1024 * 1024)
-            abs_path = os.path.abspath(saved)
-            console.print(
-                Panel(
-                    f"[bold green]Pobrano:[/bold green]  [bold]{os.path.basename(saved)}[/bold]\n"
-                    f"[bold]Rozmiar:[/bold]  {size_mb:.2f} MB\n"
-                    f"[bold]Lokalizacja:[/bold] {abs_path}",
-                    title="[bold]✅ Pobieranie zakończone[/bold]",
-                    border_style="green",
-                    padding=(1, 2),
-                )
-            )
-        except Exception as exc:
-            console.print(f"[red]❌ Błąd podczas pobierania: {exc}[/red]")
-            console.print(f"[dim]Możesz pobrać ręcznie:[/dim]\n[cyan]{best_url}[/cyan]")
-            sys.exit(1)
-    else:
-        console.print(f"\n[dim]Link do ręcznego pobrania:[/dim]")
-        console.print(f"[cyan]{best_url}[/cyan]")
-
-    console.print("\n[bold green]Gotowe! ✨[/bold green]\n")
+    console.print("\n[bold green]Done! ✨[/bold green]\n")
 
 
 if __name__ == "__main__":

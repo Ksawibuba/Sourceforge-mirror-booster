@@ -20,8 +20,13 @@ pip install requests rich
 ```
 If u want to check all of mirrors use this command
 
+To run it use this command
 ```bash
-python3 szpons-eng.py --list-mirrors
+python3 szpons.py 
+```
+
+```bash
+python3 szpons.py --list-mirrors
 
 ```
 

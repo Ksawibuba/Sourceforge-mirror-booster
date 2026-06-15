@@ -22,6 +22,7 @@ If u want to check all of mirrors use this command
 ```bash
 python3 szpons-eng.py --list-mirrors
 
+```
 ## 🇵🇱 SourceForge Mirror Booster (Po Polsku)
 
 Szybki, współbieżny program CLI do sprawdzania prędkości mirrorów SourceForge i pobierania plików, wyposażony w estetyczny interfejs graficzny w terminalu.

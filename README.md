@@ -1,6 +1,6 @@
 # 🚀 SourceForge Mirror Booster
 
-## 🇺🇸 SourceForge Mirror Booster (English)
+## SourceForge Mirror Booster
 
 A fast, parallel CLI SourceForge mirror speed checker and downloader featuring a beautiful terminal user interface.
 

@@ -17,8 +17,9 @@ This tool automatically benchmarks available SourceForge mirrors in parallel, me
 The script automatically detects and installs missing dependencies on startup. However, you can also install them manually beforehand:
 ```bash
 pip install requests rich
-
+```
 If u want to check all of mirrors use this command
+
 ```bash
 python3 szpons-eng.py --list-mirrors
 
@@ -38,9 +39,11 @@ Narzędzie automatycznie testuje dostępne serwery lustrzane (mirrory) SourceFor
 
 ### 📦 Instalacja
 Skrypt automatycznie wykrywa i instaluje brakujące pakiety przy uruchomieniu. Możesz je także zainstalować ręcznie przed uruchomieniem:
-```bash
+```
 pip install requests rich
-
+```
 Jezeli chcesz zobaczyc wszystkie mirrory to uzyj tej komendy 
-```bash
+
+```
 python3 szpons.py --list-mirrors
+```
